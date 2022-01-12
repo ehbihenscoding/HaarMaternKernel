@@ -12,7 +12,7 @@ class KernHaarMatern52(Kern):
         self.dim_start = dim_start
         self.lengthscale = Param('lengthscale', lengthscale)
         #self.power = Param('power', power)
-        self.link_parameters(self.variance, self.lengthscale)#, self.power)
+        self.link_parameters( self.lengthscale)#, self.power)
 
     #### fonction pour annoncer les changements de paramètres
     def parameters_changed(self):
