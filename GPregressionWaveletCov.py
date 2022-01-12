@@ -2,7 +2,7 @@
 import scipy as sp
 import pandas as pd
 import numpy as np
-import torch
+#import torch
 import math
 import matplotlib.pyplot as plt
 ### Import the Gaussian process framework
@@ -29,9 +29,9 @@ def errQ2temp( est , ref):
 
 ## On génère un sinus avec 1 paramètre pour faire notre simulation de données
 dim = 1
-Nt = 2**6
+Nt = 2**5
 t = np.linspace(0, 1,Nt)
-NH = 5
+NH = 10
 NL = 23
 xH = lhs( dim, samples = NH)
 yH = np.sin( 4*np.pi*xH*t+ xH/2)
@@ -47,7 +47,9 @@ Exact = np.sin( 4*np.pi*Xtest*t+ Xtest/2)
 #Exact = np.sin( 4*np.pi*t)+ (Xtest/2 -1/4)
 detat = int(t[-1]-t[0])
 
-
+#Ndata = NH
+#Xtest = xH
+#Exact = yH
 ### Décompositon en ondelette
 ### On ch
 
@@ -153,12 +155,13 @@ m[".*Gaussian_noise"].fix()
 
 m.optimize(max_iters = 2000,messages=True, optimizer = "scg")  # optimisation des hyperpamètres
 
-#m[".*Gaussian_noise"].unfix()
+m[".*Gaussian_noise"].unfix()
 #m[".*Gaussian_noise"].constrain_positive()
-#m[".*variance"].constrain_positive()
+m[".*variance"].constrain_positive()
+m[".*lengthscale"].constrain_positive()
 
 #
-# m.optimize_restarts(20, optimizer = "scg",  max_iters = 2000, messages=True) #,verbose=False)
+m.optimize_restarts(20, optimizer = "scg",  max_iters = 2000, messages=True) #,verbose=False)
 
 mu1, v1 = m.predict(Xdata)
 
@@ -197,8 +200,8 @@ for j in range(wlevel):
             for kprime in range(2**jprime):
                 nbvar = (2**j + k -1)*Ndata# on définit la valeur pour le premier élément
                 nbvarprime =  (2**jprime + kprime -1)*Ndata# on définit la valeur pour le deuxième élément
-                variancelocal = np.diag(v1[nbvar:nbvar+Ndata,0,nbvarprime:nbvarprime+Ndata]).reshape(Ndata,1) # calcule de la variance local pour j,k,jprime,kprime
-                variancetot = variancetot + variancelocal * psipsiproduct( j, jprime, k, kprime, Nt)
+                variancelocal = np.diag(v1[nbvar:nbvar+Ndata,0,nbvarprime:nbvarprime+Ndata]).reshape(Ndata,1) # calcule de la covariance local entre  (j,k) et (jprime,kprime) à X constant
+                variancetot = variancetot + variancelocal * psipsiproduct( j, jprime, k, kprime, Nt)    # On ajoute le terme à la somme des termes
                 
 waveletvar = abs(variancetot) ### pour que ça soit bien positif
 
@@ -229,7 +232,7 @@ couleurs= ['b','r','y','g','purple','orange','navy','magenta','lime','aqua','bis
 for i in range(10):
     plt.plot( t, Exact[i,:], color=couleurs[i])
     plt.plot( t, predWmean[i,:],'--', color=couleurs[i])
-    #plt.fill_between( t, predWmean[i,:] - 1.96*np.sqrt(waveletvar[i,:])/2, predWmean[i,:] + 1.96*np.sqrt(waveletvar[i,:])/2, alpha=0.5, color=couleurs[i])
+    plt.fill_between( t, predWmean[i,:] - 1.96*np.sqrt(waveletvar[i,:])/2, predWmean[i,:] + 1.96*np.sqrt(waveletvar[i,:])/2, alpha=0.5, color=couleurs[i])
 
 #plt.savefig("examplesCurves")
 plt.show()
