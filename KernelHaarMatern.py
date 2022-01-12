@@ -6,11 +6,10 @@ from GPy.core.parameterization import Param
 class KernHaarMatern52(Kern):
     """ Cette classe est celle définisant le noyau de covariance dans l'espace des 
     coefficients d'ondelette. C'est une classe fille de la classe Kern de GPy."""
-    def __init__(self, input_dim=2, dim_start=1, variance=.35, lengthscale=2., active_dims=None):
+    def __init__(self, input_dim=2, dim_start=1, lengthscale=2., active_dims=None):
         super(KernHaarMatern52, self).__init__(input_dim, active_dims, 'haar_m52')
        # assert 
         self.dim_start = dim_start
-        self.variance = Param('variance', variance)
         self.lengthscale = Param('lengthscale', lengthscale)
         #self.power = Param('power', power)
         self.link_parameters(self.variance, self.lengthscale)#, self.power)
@@ -25,13 +24,13 @@ class KernHaarMatern52(Kern):
         if X2 is None: X2=X1
         #inter = np.zeros((X1.shape[0], X2.shape[0]))
         #for i in range(X1.shape[0]):
-        #    inter[i,:] = self.coeffInteger( X1[i,self.dim_start], X2[:,self.dim_start])/self.lengthscale**5 *self.variance*self.integralFull( X1[i,self.dim_start+1], X2[:,self.dim_start+1], X1[i,self.dim_start], X2[:,self.dim_start])
-        inter = self.coeffInteger( X1[:,self.dim_start], X2[:,self.dim_start])*abs(self.lengthscale) *self.variance*self.integralFull( X1[:,self.dim_start+1], X2[:,self.dim_start+1], X1[:,self.dim_start], X2[:,self.dim_start])
+        #    inter[i,:] = self.coeffInteger( X1[i,self.dim_start], X2[:,self.dim_start])/self.lengthscale**5 *self.integralFull( X1[i,self.dim_start+1], X2[:,self.dim_start+1], X1[i,self.dim_start], X2[:,self.dim_start])
+        inter = self.coeffInteger( X1[:,self.dim_start], X2[:,self.dim_start])*abs(self.lengthscale) *self.integralFull( X1[:,self.dim_start+1], X2[:,self.dim_start+1], X1[:,self.dim_start], X2[:,self.dim_start])
         return(  inter)
 
     ### la méthode pour caculer la varianceX1[:,self.dim_start+1]
     def Kdiag( self, X):
-        return( self.coeffInteger( X[:,self.dim_start], X[:,self.dim_start])*abs(self.lengthscale) *self.variance*self.integralFull( X[:,self.dim_start+1], X[:,self.dim_start+1], X[:,self.dim_start], X[:,self.dim_start]))
+        return( self.coeffInteger( X[:,self.dim_start], X[:,self.dim_start])*abs(self.lengthscale) *self.integralFull( X[:,self.dim_start+1], X[:,self.dim_start+1], X[:,self.dim_start], X[:,self.dim_start]))
 
 
     ### la méthode pour calculer le coefficient de normalisation de la covariance
@@ -95,5 +94,4 @@ class KernHaarMatern52(Kern):
     def update_gradients_full(self, dL_dK, X1, X2):
         if X2 is None: X2 = X1
         
-        self.variance.gradient = np.sum(dL_dK * self.coeffInteger( X1[:,self.dim_start], X2[:,self.dim_start])*self.lengthscale*self.integralFull( X1[:,self.dim_start+1], X2[:,self.dim_start+1], X1[:,self.dim_start], X2[:,self.dim_start]))
-        self.lengthscale.gradient = np.sum(dL_dK *self.variance*self.coeffInteger( X1[:,self.dim_start], X2[:,self.dim_start]) *self.integralFullDerivative( X1[:,self.dim_start+1], X2[:,self.dim_start+1], X1[:,self.dim_start], X2[:,self.dim_start]))
+        self.lengthscale.gradient = np.sum(dL_dK *self.coeffInteger( X1[:,self.dim_start], X2[:,self.dim_start]) *self.integralFullDerivative( X1[:,self.dim_start+1], X2[:,self.dim_start+1], X1[:,self.dim_start], X2[:,self.dim_start]))
