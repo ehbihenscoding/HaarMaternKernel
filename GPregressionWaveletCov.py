@@ -148,11 +148,13 @@ setSize = 100   # Definition of the number of element in the learning set
 optimalset = np.random.permutation(NH*NbCO)[:setSize]   # creation of the first set to compare
 kernelHaar = KernHaarMatern52(2+dim,dim, 15)*GPy.kern.Matern52(dim) # definition of the covariance kernel
 mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # Construction of the surrogate model
+mprior.optimize(max_iters = 2000,messages=True, optimizer = "tnc")  # optimization of the hyperparameters
 error = np.sum(mprior.predict(X, full_cov=False)[1])    # Construction of the error   # np.sum((mprior.predict(X)[0]-Y)**2)
 
-for iteration in range(1000):
+for iteration in range(100):
     nexSet = np.random.permutation(NH*NbCO)[:setSize]   # randomization of the new set
     mprior = GPy.models.GPRegression(X=X[nexSet,:], Y=Y[nexSet,:], kernel=kernelHaar)   # bulding of the new para
+    mprior.optimize(max_iters = 2000,messages=True, optimizer = "tnc", messages=False)  # optimization of the hyperparameters
     newError = np.sum(mprior.predict(X, full_cov=False)[1])   # Set of the new error
     if newError < error:    # Commpareason with the old best error
         print(iteration)
@@ -251,7 +253,7 @@ plt.show()
 
 ### Affichage courbes
 couleurs= ['b','r','y','g','purple','orange','navy','magenta','lime','aqua','bisque','royalblue','gray','gold','tan']
-for i in range(3):
+for i in range(1):
     plt.plot( t, Exact[i,:], color=couleurs[i])
     plt.plot( t, predWmean[i,:],'--', color=couleurs[i])
     plt.fill_between( t, predWmean[i,:] - 1.96*np.sqrt(waveletvar[i,:])/2, predWmean[i,:] + 1.96*np.sqrt(waveletvar[i,:])/2, alpha=0.5, color=couleurs[i])
