@@ -147,13 +147,13 @@ for i in range(1,wlevel+1):  # on fait l'intération sur les niveaux
 setSize = 100   # Definition of the number of element in the learning set
 optimalset = np.random.permutation(NH*NbCO)[:setSize]   # creation of the first set to compare
 kernelHaar = KernHaarMatern52(2+dim,dim, 15)*GPy.kern.Matern52(dim) # definition of the covariance kernel
-mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # Construction of the 
-error = np.sum((mprior.predict(X)[0]-Y)**2)
+mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # Construction of the surrogate model
+error = np.sum(mprior.predict(X, full_cov=False)[1])    # Construction of the error   # np.sum((mprior.predict(X)[0]-Y)**2)
 
 for iteration in range(1000):
     nexSet = np.random.permutation(NH*NbCO)[:setSize]   # randomization of the new set
     mprior = GPy.models.GPRegression(X=X[nexSet,:], Y=Y[nexSet,:], kernel=kernelHaar)   # bulding of the new para
-    newError = np.sum((mprior.predict(X)[0]-Y)**2)  # Set of the new error
+    newError = np.sum(mprior.predict(X, full_cov=False)[1])   # Set of the new error
     if newError < error:    # Commpareason with the old best error
         print(iteration)
         error = newError
