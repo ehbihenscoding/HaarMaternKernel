@@ -31,7 +31,7 @@ def errQ2temp( est , ref):
 dim = 1
 Nt = 2**5
 t = np.linspace(0, 1,Nt)
-NH = 10
+NH = 17
 NL = 23
 xH = lhs( dim, samples = NH)
 yH = np.sin( 4*np.pi*xH*t+ xH/2)
@@ -140,20 +140,42 @@ for i in range(1,wlevel+1):  # on fait l'intération sur les niveaux
     j = j+tailleData
     jX = jX+tailleData * Ndata
 
+######################################################
+##############   Choice of the lerning set ###########
+######################################################
+
+setSize = 100   # Definition of the number of element in the learning set
+optimalset = np.random.permutation(NH*NbCO)[:setSize]   # creation of the first set to compare
+kernelHaar = KernHaarMatern52(2+dim,dim, 15)*GPy.kern.Matern52(dim) # definition of the covariance kernel
+mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # Construction of the 
+error = np.sum((mprior.predict(X)[0]-Y)**2)
+
+for iteration in range(1000):
+    nexSet = np.random.permutation(NH*NbCO)[:setSize]   # randomization of the new set
+    mprior = GPy.models.GPRegression(X=X[nexSet,:], Y=Y[nexSet,:], kernel=kernelHaar)   # bulding of the new para
+    newError = np.sum((mprior.predict(X)[0]-Y)**2)  # Set of the new error
+    if newError < error:    # Commpareason with the old best error
+        print(iteration)
+        error = newError
+        optimalset = nexSet
+
+#### Defition of the new learning set
+Xreduce = X[optimalset,:]
+Yreduce = Y[optimalset,:]
 
 ######################################################
-######### Regression par GP ##########################
+##############   Regression par GP    ################
 ######################################################
 
 active_dimensions = np.arange(0,dim)
 
 kernelHaar = KernHaarMatern52(2+dim,dim, 15)*GPy.kern.Matern52(dim)
-m = GPy.models.GPRegression(X=X, Y=Y, kernel=kernelHaar)
+m = GPy.models.GPRegression(X=Xreduce, Y=Yreduce, kernel=kernelHaar)
 
-m[".*Gaussian_noise"] = m.Y.var()*0.0
+m[".*Gaussian_noise"] = m.Yreduce.var()*0.0
 m[".*Gaussian_noise"].fix()
 
-m.optimize(max_iters = 2000,messages=True, optimizer = "scg")  # optimisation des hyperpamètres
+m.optimize(max_iters = 2000,messages=True, optimizer = "bfgs")  # optimisation des hyperpamètres
 
 m[".*Gaussian_noise"].unfix()
 #m[".*Gaussian_noise"].constrain_positive()
@@ -161,7 +183,7 @@ m[".*variance"].constrain_positive()
 m[".*lengthscale"].constrain_positive()
 
 #
-m.optimize_restarts(20, optimizer = "scg",  max_iters = 2000, messages=True) #,verbose=False)
+m.optimize_restarts(20, optimizer = "bfgs",  max_iters = 2000, messages=True) #,verbose=False)
 
 mu1, v1 = m.predict(Xdata)
 
@@ -220,7 +242,7 @@ for i in range(len(waveletExact)):
 plt.clf()
 plt.plot(t, errQ2temp(predWmean,Exact), label="wavelet")
 #plt.plot(t, errQ2temp(PredR.numpy(),Exact.numpy()), label="Mixed")
-plt.ylim( 0.90, 1.001)
+plt.ylim( 0.60, 1.001)
 plt.legend()
 #plt.savefig("Q2NH_7sinus.pdf")
 plt.show()
@@ -229,7 +251,7 @@ plt.show()
 
 ### Affichage courbes
 couleurs= ['b','r','y','g','purple','orange','navy','magenta','lime','aqua','bisque','royalblue','gray','gold','tan']
-for i in range(10):
+for i in range(3):
     plt.plot( t, Exact[i,:], color=couleurs[i])
     plt.plot( t, predWmean[i,:],'--', color=couleurs[i])
     plt.fill_between( t, predWmean[i,:] - 1.96*np.sqrt(waveletvar[i,:])/2, predWmean[i,:] + 1.96*np.sqrt(waveletvar[i,:])/2, alpha=0.5, color=couleurs[i])
