@@ -29,10 +29,10 @@ def errQ2temp( est , ref):
 
 ## On génère un sinus avec 1 paramètre pour faire notre simulation de données
 dim = 1
-Nt = 2**5
+Nt = 2**7
 t = np.linspace(0, 1,Nt)
-NH = 17
-NL = 23
+NH = 50
+NL = 200
 xH = lhs( dim, samples = NH)
 yH = np.sin( 4*np.pi*xH*t+ xH/2)
 #yH = np.sin( 4*np.pi*t)+ (xH/2 -1/4)
@@ -144,7 +144,7 @@ for i in range(1,wlevel+1):  # on fait l'intération sur les niveaux
 ##############   Choice of the lerning set ###########
 ######################################################
 
-setSize = 50   # Definition of the number of element in the learning set
+setSize = 200   # Definition of the number of element in the learning set
 optimalset = np.random.permutation(NH*NbCO)[:setSize]   # creation of the first set to compare
 kernelHaar = KernHaarMatern52(2+dim,dim, 15)*GPy.kern.Matern52(dim) # definition of the covariance kernel
 mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # Construction of the surrogate model
@@ -152,17 +152,18 @@ mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=ke
 mprior[".*Gaussian_noise"] = m.Y[optimalset,:].var()*0.01   # definition of the Gaussian noise
 mprior[".*Gaussian_noise"].fix()    # fit of the Gausian noise
 mprior.optimize(max_iters = 2000,messages=True, optimizer = "bfgs")  # optimization of the hyperparameters
-error = np.sum(mprior.predict(X, full_cov=False)[1])    # Construction of the error   # np.sum((mprior.predict(X)[0]-Y)**2)
+error = np.sum(mprior.predict(X[optimalset,:], full_cov=False)[1])    # Construction of the error   # np.sum((mprior.predict(X)[0]-Y)**2)
 
-for iteration in range(1000):
+for iteration in range(100):
     nexSet = np.random.permutation(NH*NbCO)[:setSize]   # randomization of the new set
     mprior = GPy.models.GPRegression(X=X[nexSet,:], Y=Y[nexSet,:], kernel=kernelHaar)   # bulding of the new para
     ### fit 
     mprior[".*Gaussian_noise"].fix()    # fit of the Gausian noise
-    mprior[".*variance"].constrain_positive()
-    mprior[".*lengthscale"].constrain_positive()
     mprior.optimize(max_iters = 2000,messages=False, optimizer = "bfgs")  # optimization of the hyperparameters
-    newError = np.sum(mprior.predict(X, full_cov=False)[1])   # Set of the new error
+    mprior[".*variance"].constrain_positive()   # Condition on the variance
+    mprior[".*lengthscale"].constrain_positive()    # Condition on the lengthscale
+    mprior.optimize_restarts(3, optimizer = "bfgs",  max_iters = 200, messages=False)
+    newError = np.sum(mprior.predict(X[optimalset,:], full_cov=False)[1])   # Set of the new error
     if newError < error:    # Commpareason with the old best error
         print(iteration)
         error = newError
