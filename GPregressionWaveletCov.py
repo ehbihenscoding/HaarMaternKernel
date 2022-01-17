@@ -144,17 +144,24 @@ for i in range(1,wlevel+1):  # on fait l'intération sur les niveaux
 ##############   Choice of the lerning set ###########
 ######################################################
 
-setSize = 100   # Definition of the number of element in the learning set
+setSize = 50   # Definition of the number of element in the learning set
 optimalset = np.random.permutation(NH*NbCO)[:setSize]   # creation of the first set to compare
 kernelHaar = KernHaarMatern52(2+dim,dim, 15)*GPy.kern.Matern52(dim) # definition of the covariance kernel
 mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # Construction of the surrogate model
-mprior.optimize(max_iters = 2000,messages=True, optimizer = "tnc")  # optimization of the hyperparameters
+### fit 
+mprior[".*Gaussian_noise"] = m.Y[optimalset,:].var()*0.01   # definition of the Gaussian noise
+mprior[".*Gaussian_noise"].fix()    # fit of the Gausian noise
+mprior.optimize(max_iters = 2000,messages=True, optimizer = "bfgs")  # optimization of the hyperparameters
 error = np.sum(mprior.predict(X, full_cov=False)[1])    # Construction of the error   # np.sum((mprior.predict(X)[0]-Y)**2)
 
-for iteration in range(100):
+for iteration in range(1000):
     nexSet = np.random.permutation(NH*NbCO)[:setSize]   # randomization of the new set
     mprior = GPy.models.GPRegression(X=X[nexSet,:], Y=Y[nexSet,:], kernel=kernelHaar)   # bulding of the new para
-    mprior.optimize(max_iters = 2000,messages=True, optimizer = "tnc", messages=False)  # optimization of the hyperparameters
+    ### fit 
+    mprior[".*Gaussian_noise"].fix()    # fit of the Gausian noise
+    mprior[".*variance"].constrain_positive()
+    mprior[".*lengthscale"].constrain_positive()
+    mprior.optimize(max_iters = 2000,messages=False, optimizer = "bfgs")  # optimization of the hyperparameters
     newError = np.sum(mprior.predict(X, full_cov=False)[1])   # Set of the new error
     if newError < error:    # Commpareason with the old best error
         print(iteration)
@@ -177,7 +184,7 @@ m = GPy.models.GPRegression(X=Xreduce, Y=Yreduce, kernel=kernelHaar)
 m[".*Gaussian_noise"] = m.Yreduce.var()*0.0
 m[".*Gaussian_noise"].fix()
 
-m.optimize(max_iters = 2000,messages=True, optimizer = "bfgs")  # optimisation des hyperpamètres
+m.optimize(max_iters = 2000, messages=True, optimizer = "bfgs")  # optimisation des hyperpamètres
 
 m[".*Gaussian_noise"].unfix()
 #m[".*Gaussian_noise"].constrain_positive()
