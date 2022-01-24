@@ -11,6 +11,7 @@ import GPy
 import pywt
 ### And LHS
 from pyDOE import lhs
+from tqdm import tqdm
 
 ### on ouvre notre noyau de Matern
 from KernelHaarMatern import KernHaarMatern52
@@ -29,7 +30,7 @@ def errQ2temp( est , ref):
 
 ## On génère un sinus avec 1 paramètre pour faire notre simulation de données
 dim = 1
-Nt = 2**7
+Nt = 2**6
 t = np.linspace(0, 1,Nt)
 NH = 50
 NL = 200
@@ -41,7 +42,7 @@ yL = yH
 Ndata = 10
 
 ### Comme c'est trop couteux pour le moment
-Ndata = 100
+Ndata = 3   # 
 Xtest = np.random.uniform(0,1, Ndata).reshape(Ndata,dim)
 Exact = np.sin( 4*np.pi*Xtest*t+ Xtest/2)
 #Exact = np.sin( 4*np.pi*t)+ (Xtest/2 -1/4)
@@ -144,30 +145,50 @@ for i in range(1,wlevel+1):  # on fait l'intération sur les niveaux
 ##############   Choice of the lerning set ###########
 ######################################################
 
-setSize = 200   # Definition of the number of element in the learning set
-optimalset = np.random.permutation(NH*NbCO)[:setSize]   # creation of the first set to compare
-kernelHaar = KernHaarMatern52(2+dim,dim, 15)*GPy.kern.Matern52(dim) # definition of the covariance kernel
-mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # Construction of the surrogate model
-### fit 
-mprior[".*Gaussian_noise"] = m.Y[optimalset,:].var()*0.01   # definition of the Gaussian noise
-mprior[".*Gaussian_noise"].fix()    # fit of the Gausian noise
-mprior.optimize(max_iters = 2000,messages=True, optimizer = "bfgs")  # optimization of the hyperparameters
-error = np.sum(mprior.predict(X[optimalset,:], full_cov=False)[1])    # Construction of the error   # np.sum((mprior.predict(X)[0]-Y)**2)
 
-for iteration in range(100):
-    nexSet = np.random.permutation(NH*NbCO)[:setSize]   # randomization of the new set
-    mprior = GPy.models.GPRegression(X=X[nexSet,:], Y=Y[nexSet,:], kernel=kernelHaar)   # bulding of the new para
-    ### fit 
+# #######    Random state
+# setSize = 500   # Definition of the number of element in the learning set
+# optimalset = np.random.permutation(NH*NbCO)[:setSize]   # creation of the first set to compare
+# kernelHaar = KernHaarMatern52(2+dim,dim, 15)*GPy.kern.Matern52(dim) # definition of the covariance kernel
+# #mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # Construction of the surrogate model
+# ### fit 
+# #mprior[".*Gaussian_noise"] = m.Y[optimalset,:].var()*0.01   # definition of the Gaussian noise
+# #mprior[".*Gaussian_noise"].fix()    # fit of the Gausian noise
+# #mprior.optimize(max_iters = 200,messages=True, optimizer = "bfgs")  # optimization of the hyperparameters
+# error = np.sum(mprior.predict(X[optimalset,:], full_cov=False)[1])    # Construction of the error   # np.sum((mprior.predict(X)[0]-Y)**2)
+
+# for iteration in range(10000):
+#     nexSet = np.random.permutation(NH*NbCO)[:setSize]   # randomization of the new set
+#     mprior = GPy.models.GPRegression(X=X[nexSet,:], Y=Y[nexSet,:], kernel=kernelHaar)   # bulding of the new para
+#     ### fit 
+#     #mprior[".*Gaussian_noise"].fix()    # fit of the Gausian noise
+#     #mprior.optimize(max_iters = 200,messages=False, optimizer = "bfgs")  # optimization of the hyperparameters
+#     #mprior[".*variance"].constrain_positive()   # Condition on the variance
+#     #mprior[".*lengthscale"].constrain_positive()    # Condition on the lengthscale
+#     #mprior.optimize_restarts(3, optimizer = "bfgs",  max_iters = 200, messages=False)
+#     newError = np.sum(mprior.predict(X[np.random.permutation(NH*NbCO)[:setSize],:], full_cov=False)[1])   # Set of the new error
+#     if newError < error:    # Commpareason with the old best error
+#         print(iteration)
+#         error = newError
+#         optimalset = nexSet
+
+##### Adaptative way
+nbElements = 500    # the number of elements in the learning set
+kernelHaar = KernHaarMatern52(2+dim,dim, 1)*GPy.kern.Matern52(dim,1,1) # Definition of the kernel
+for repetition in tqdm(range(5)):   # optimisation loop: we repeat the optimisation in order to improve the learning set
+    corMatrix = kernelHaar.K(X) # definition of the covariance
+    covVector = np.sum(np.abs(corMatrix),1) # definition of the vector of explaine covariance for each element of the full set
+    ###seuil = np.mean(np.sum(np.abs(corMatrix),1)* (1/X[:,1]))*1.4
+    optimalset = np.argsort(covVector, kind = 'mergesort')[:nbElements] # elements in the learning set are the most important one in the vector
+    ##optimalser = np.unique(np.heaviside(np.sum(np.abs(corMatrix),1)* (1/X[:,1]) -seuil,1) * np.linspace(0, X.shape[0]-1,X.shape[0]).T)
+    mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # bulding of the new para
     mprior[".*Gaussian_noise"].fix()    # fit of the Gausian noise
-    mprior.optimize(max_iters = 2000,messages=False, optimizer = "bfgs")  # optimization of the hyperparameters
-    mprior[".*variance"].constrain_positive()   # Condition on the variance
-    mprior[".*lengthscale"].constrain_positive()    # Condition on the lengthscale
-    mprior.optimize_restarts(3, optimizer = "bfgs",  max_iters = 200, messages=False)
-    newError = np.sum(mprior.predict(X[optimalset,:], full_cov=False)[1])   # Set of the new error
-    if newError < error:    # Commpareason with the old best error
-        print(iteration)
-        error = newError
-        optimalset = nexSet
+    mprior.optimize(max_iters = 200,messages=False, optimizer = "tnc")  # optimization of the hyperparameters
+
+#### Petit affichage pour moi
+plt.plot( np.sum(np.abs(corMatrix)* (1/X[:,1]),1))
+plt.plot( [0,3000], [seuil,seuil])
+plt.show()
 
 #### Defition of the new learning set
 Xreduce = X[optimalset,:]
@@ -261,7 +282,7 @@ plt.show()
 
 ### Affichage courbes
 couleurs= ['b','r','y','g','purple','orange','navy','magenta','lime','aqua','bisque','royalblue','gray','gold','tan']
-for i in range(1):
+for i in range(3):
     plt.plot( t, Exact[i,:], color=couleurs[i])
     plt.plot( t, predWmean[i,:],'--', color=couleurs[i])
     plt.fill_between( t, predWmean[i,:] - 1.96*np.sqrt(waveletvar[i,:])/2, predWmean[i,:] + 1.96*np.sqrt(waveletvar[i,:])/2, alpha=0.5, color=couleurs[i])
