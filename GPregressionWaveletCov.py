@@ -27,6 +27,15 @@ def errQ2temp( est , ref):
         output[i] = errQ2(est[:,i],ref[:,i])
     return output
 
+#### Definition of the discontinuous function with linear correlation
+def fL(x,t):
+    """ Low fidelity fonction """
+    return(np.piecewise(t, [x<=0.5,x>0.5], [0.5*(6*t-2)**2*np.sin(12*t-4)+10*(x-0.5)-5,3+0.5*(6*t-2)**2*np.sin(12*t-4)+10*(x-0.5)-5]))
+
+def fH(x,t):
+    """ High fidelity function """
+    return(np.piecewise(t, [x<=0.5,x>0.5], [2*fL(x,t)-20*x+20,4+2*fL(x,t)-20*x+20]))
+
 
 ## On génère un sinus avec 1 paramètre pour faire notre simulation de données
 dim = 1
