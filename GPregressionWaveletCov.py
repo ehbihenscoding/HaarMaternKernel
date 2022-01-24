@@ -30,18 +30,18 @@ def errQ2temp( est , ref):
 #### Definition of the discontinuous function with linear correlation
 def fL(x,t):
     """ Low fidelity fonction """
-    return(np.piecewise(t, [x<=0.5,x>0.5], [0.5*(6*t-2)**2*np.sin(12*t-4)+10*(x-0.5)-5,3+0.5*(6*t-2)**2*np.sin(12*t-4)+10*(x-0.5)-5]))
+    return(np.select([t<=x,t>x], [0.5*(6*t-2)**2*np.sin(12*t-4)+10*(t-0.5)-5,3+0.5*(6*t-2)**2*np.sin(12*t-4)+10*(t-0.5)-5]))
 
 def fH(x,t):
     """ High fidelity function """
-    return(np.piecewise(t, [x<=0.5,x>0.5], [2*fL(x,t)-20*t+20,4+2*fL(x,t)-20*t+20]))
+    return(np.select([t<=x,t>x], [2*fL(x,t)-20*t+20,4+2*fL(x,t)-20*t+20]))
 
 
 ## On génère un sinus avec 1 paramètre pour faire notre simulation de données
 dim = 1
 Nt = 2**6
 t = np.linspace(0, 1,Nt)
-NH = 50
+NH = 30
 NL = 200
 xH = lhs( dim, samples = NH)
 yH = fH(xH,t)
@@ -54,7 +54,8 @@ Ndata = 10
 ### Comme c'est trop couteux pour le moment
 Ndata = 3   # 
 Xtest = np.random.uniform(0,1, Ndata).reshape(Ndata,dim)
-Exact = np.sin( 4*np.pi*Xtest*t+ Xtest/2)
+Exact = fH(Xtest,t)
+#Exact = np.sin( 4*np.pi*Xtest*t+ Xtest/2)
 #Exact = np.sin( 4*np.pi*t)+ (Xtest/2 -1/4)
 detat = int(t[-1]-t[0])
 
