@@ -34,7 +34,7 @@ def fL(x,t):
 
 def fH(x,t):
     """ High fidelity function """
-    return(np.piecewise(t, [x<=0.5,x>0.5], [2*fL(x,t)-20*x+20,4+2*fL(x,t)-20*x+20]))
+    return(np.piecewise(t, [x<=0.5,x>0.5], [2*fL(x,t)-20*t+20,4+2*fL(x,t)-20*t+20]))
 
 
 ## On génère un sinus avec 1 paramètre pour faire notre simulation de données
@@ -44,7 +44,8 @@ t = np.linspace(0, 1,Nt)
 NH = 50
 NL = 200
 xH = lhs( dim, samples = NH)
-yH = np.sin( 4*np.pi*xH*t+ xH/2)
+yH = fH(xH,t)
+#yH = np.sin( 4*np.pi*xH*t+ xH/2)
 #yH = np.sin( 4*np.pi*t)+ (xH/2 -1/4)
 xL = xH
 yL = yH
