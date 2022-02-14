@@ -39,14 +39,14 @@ def fH(x,t):
 
 ## On génère un sinus avec 1 paramètre pour faire notre simulation de données
 dim = 1
-Nt = 2**6
+Nt = 2**8
 t = np.linspace(0, 1,Nt)
-NH = 30
+NH = 2
 NL = 200
 xH = lhs( dim, samples = NH)
 yH = fH(xH,t)
 #yH = np.sin( 4*np.pi*xH*t+ xH/2)
-#yH = np.sin( 4*np.pi*t)+ (xH/2 -1/4)
+yH = np.sin( 4*np.pi*t )+ (xH/2 -1/4)
 xL = xH
 yL = yH
 Ndata = 10
@@ -56,7 +56,7 @@ Ndata = 3   #
 Xtest = np.random.uniform(0,1, Ndata).reshape(Ndata,dim)
 Exact = fH(Xtest,t)
 #Exact = np.sin( 4*np.pi*Xtest*t+ Xtest/2)
-#Exact = np.sin( 4*np.pi*t)+ (Xtest/2 -1/4)
+Exact = np.sin( 4*np.pi*t)+ (Xtest/2 -1/4)
 detat = int(t[-1]-t[0])
 
 #Ndata = NH
@@ -115,7 +115,7 @@ Y = Ymatrix.T.reshape(( NY,1))
 ### Pour i = 0 on passe par la fonction d'echelle donc par un krigeage indépendant
 ############################################################
 Xechell = xH
-Yechell = waveletH[0]
+Yechell = waveletH[0] /np.sqrt(Nt)  ## Normalisation to get the same value for each Nt
 
 active_dimensions = np.arange(0,dim)
 
@@ -183,27 +183,96 @@ for i in range(1,wlevel+1):  # on fait l'intération sur les niveaux
 #         error = newError
 #         optimalset = nexSet
 
-##### Adaptative way
-nbElements = 500    # the number of elements in the learning set
-kernelHaar = KernHaarMatern52(2+dim,dim, 1)*GPy.kern.Matern52(dim,1,1) # Definition of the kernel
-for repetition in tqdm(range(5)):   # optimisation loop: we repeat the optimisation in order to improve the learning set
-    corMatrix = kernelHaar.K(X) # definition of the covariance
-    covVector = np.sum(np.abs(corMatrix),1) # definition of the vector of explaine covariance for each element of the full set
-    ###seuil = np.mean(np.sum(np.abs(corMatrix),1)* (1/X[:,1]))*1.4
-    optimalset = np.argsort(covVector, kind = 'mergesort')[:nbElements] # elements in the learning set are the most important one in the vector
-    ##optimalser = np.unique(np.heaviside(np.sum(np.abs(corMatrix),1)* (1/X[:,1]) -seuil,1) * np.linspace(0, X.shape[0]-1,X.shape[0]).T)
-    mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # bulding of the new para
-    mprior[".*Gaussian_noise"].fix()    # fit of the Gausian noise
-    mprior.optimize(max_iters = 200,messages=False, optimizer = "tnc")  # optimization of the hyperparameters
+## Pour la fonction d'ondelette
+# on définite la fonction de produit d'ondelette:
+def psipsiproduct( j, jprime, k, kprime, Nt):
+    result = np.zeros(Nt) # initalisation de la sortie
+    psi = np.concatenate(( np.zeros(Nt//2**(j+1)) + 1, np.zeros(Nt//2**(j+1)) -1))
+    psiprime = np.concatenate(( np.zeros(Nt//2**(jprime+1)) + 1, np.zeros(Nt//2**(jprime+1)) -1))
+    size = psi.shape[0]
+    sizeprime = psiprime.shape[0]
+    psi = np.concatenate((np.zeros(size*k), psi, np.zeros(Nt-size*(k+1))))
+    psiprime = np.concatenate((np.zeros(sizeprime*kprime), psiprime, np.zeros(Nt-sizeprime*(kprime+1))))
+    return( psi * psiprime/np.sqrt(2**j*2**jprime))
 
-#### Petit affichage pour moi
-plt.plot( np.sum(np.abs(corMatrix)* (1/X[:,1]),1))
-plt.plot( [0,3000], [seuil,seuil])
-plt.show()
+#### Define the computation of the variance
+def varianceComp( wlevel, scale, covMat, Ndata, Nt):
+    """ This function takes in input the covariance matrix and the sampled elements
+        and give in output the variance of the elements.
+        Inputs :    wlevel  the number of level of the 
+                    scale   the result of the scale function variance
+                    covMat  the covariance output of the regression
+                    Ndata   the size of data
+                    Nt      the length of the time-serie
+        Output :    var     the variance in the time space of the elements of X
+        """
+    var =   np.zeros((Ndata,Nt)) + scale    # Initialisation
+    ####    Iteration of the elements of j,k,j',k'
+    for j in range(wlevel):
+        for jprime in range(wlevel):
+            for k in range(2**j):
+                for kprime in range(2**jprime):
+                    nbvar = (2**j + k -1)*Ndata# on définit la valeur pour le premier élément
+                    nbvarprime =  (2**jprime + kprime -1)*Ndata# on définit la valeur pour le deuxième élément
+                    variancelocal = np.diag(covMat[nbvar:nbvar+Ndata,0,nbvarprime:nbvarprime+Ndata]).reshape(Ndata,1) # calcule de la covariance local entre  (j,k) et (jprime,kprime) à X constant
+                    var = var + variancelocal * psipsiproduct( j, jprime, k, kprime, Nt)    # On ajoute le terme à la somme des termes
+    return var
+
+#### Define the computation of the explaine variance
+def explainVariance( wlevel, covMat, Ndata, Nt):
+    """ This function takes in input the covariance matrix and the sampled elements
+        and give in output the variance of the elements.
+        Inputs :    wlevel  the number of level of the 
+                    covMat  the covariance output of the regression
+                    Ndata   the size of data
+                    Nt      the length of the time-serie
+        Output :    expVar     the variance in the time space of the elements of X
+
+            $ \text{Result} = \sum_{j',k'} Cov(a(j,k),a(j',k')) \psi_{j,k}\psi_{j',k'}
+        """
+    expVar  =   np.zeros(((Nt-1)*Ndata,1))    # Initialisation
+    ####    Iteration of the elements of j,k,j',k'
+    for jprime in range(wlevel):    # iteration on jprime
+        for kprime in range(2**jprime): #iteration on kprime
+            nbvarprime =  (2**jprime + kprime -1)*Ndata# on définit la valeur pour l'element prime
+            psiprod = np.zeros(((Nt-1)*Ndata,Nt))
+            for j in range( wlevel):    # iteration on j
+                for k in range(2**j):   # iteration on k
+                    nbvar =  (2**j + k -1)*Ndata    # evaluation of actial state
+                    variancelocal = np.diag(covMat[nbvar:nbvar+Ndata,nbvarprime:nbvarprime+Ndata]).reshape(Ndata,1)
+                    psiprod[nbvar:(nbvar+Ndata),:] = variancelocal * psipsiproduct( j, jprime, k, kprime, Nt) 
+            expVar = expVar + psiprod    # On ajoute le terme à la somme des termes
+    return expVar
+
+
+##### Adaptative way
+nbElements = 300    # the number of elements in the learning set
+kernelHaar = KernHaarMatern52(2+dim,dim, 1)*GPy.kern.Matern52(dim,1,1) # Definition of the kernel
+covVector = np.diag(kernelHaar.K(X)*1/np.sqrt(X[:,1]))
+optimalset = np.argsort(covVector, kind = 'mergesort')[-nbElements:]
+
+# for repetition in tqdm(range(10)):   # optimisation loop: we repeat the optimisation in order to improve the learning set
+#     corMatrix = kernelHaar.K(X) # definition of the covariance
+#     covVector = np.sum(np.abs(corMatrix),1) #explainVariance(wlevel, corMatrix, NH, Nt) # definition of the vector of explaine covariance for each element of the full set
+#     ###seuil = np.mean(np.sum(np.abs(corMatrix),1)* (1/X[:,1]))*1.4
+#     optimalset = np.argsort(covVector, kind = 'mergesort')[-nbElements:] # elements in the learning set are the most important one in the vector
+#     ##optimalser = np.unique(np.heaviside(np.sum(np.abs(corMatrix),1)* (1/X[:,1]) -seuil,1) * np.linspace(0, X.shape[0]-1,X.shape[0]).T)
+#     mprior = GPy.models.GPRegression(X=X[optimalset,:], Y=Y[optimalset,:], kernel=kernelHaar)   # bulding of the new para
+#     mprior[".*Gaussian_noise"].fix()    # fit of the Gausian noise
+#     mprior.optimize()#max_iters = 200,messages=False, optimizer = "bfgs", ipython_notebook=True)  # optimization of the hyperparameters
+#     #mprior[".*Gaussian_noise"].unfix()
+#     #mprior[".*variance"].constrain_positive()
+#     #mprior[".*lengthscale"].constrain_positive()
+#     #mprior.optimize_restarts(10, optimizer = "bfgs",  max_iters = 2000, messages=False, ipython_notebook=True)
 
 #### Defition of the new learning set
 Xreduce = X[optimalset,:]
 Yreduce = Y[optimalset,:]
+
+### Plot of the chosen elements
+plt.plot(covVector)#*1/np.sqrt(X[:,1]))
+plt.plot(optimalset, covVector[optimalset],'o')
+plt.show()
 
 ######################################################
 ##############   Regression par GP    ################
@@ -230,7 +299,7 @@ m.optimize_restarts(20, optimizer = "bfgs",  max_iters = 2000, messages=True) #,
 mu1, v1 = m.predict(Xdata)
 
 ### On retransforme les donnés pour pouvoir les exploiter dans l'espace considéré.
-waveletPredmu = [mu1ech] ## moyenne 
+waveletPredmu = [mu1ech * np.sqrt(Nt)] ## mean with normalisation of the coefficients
 sumsetsize = 0
 for i in range(1,wlevel+1):
     setsize = coeffOndeletteinter[i].shape[0]
@@ -242,21 +311,9 @@ for i in range(1,wlevel+1):
 
 ### calcule de la variance
 
-## Pour la fonction d'ondelette
-# on définite la fonction de produit d'ondelette:
-def psipsiproduct( j, jprime, k, kprime, Nt):
-    result = np.zeros(Nt) # initalisation de la sortie
-    psi = np.concatenate(( np.zeros(Nt//2**(j+1)) + 1, np.zeros(Nt//2**(j+1)) -1))
-    psiprime = np.concatenate(( np.zeros(Nt//2**(jprime+1)) + 1, np.zeros(Nt//2**(jprime+1)) -1))
-    size = psi.shape[0]
-    sizeprime = psiprime.shape[0]
-    psi = np.concatenate((np.zeros(size*k), psi, np.zeros(Nt-size*(k+1))))
-    psiprime = np.concatenate((np.zeros(sizeprime*kprime), psiprime, np.zeros(Nt-sizeprime*(kprime+1))))
-    return( psi * psiprime/np.sqrt(2**j*2**jprime))
-
 ## pour la fonction d'echelle
 vartot = v1ech * db1.wavefun(wlevel)[0]**2
-variancetot = np.zeros((Ndata,Nt)) + v1ech
+variancetot = np.zeros((Ndata,Nt)) + v1ech * Nt # we take into account the sqrt(Nt) in the normalisation of prediction
     
 for j in range(wlevel):
     for jprime in range(wlevel):
@@ -275,17 +332,16 @@ predWmean = pywt.waverec(waveletPredmu, db1)
 #### The exact values
 waveletExact = pywt.wavedec(Exact, db1, mode='constant', level=wlevel)
 
-### erreur au niveau du Q2:
-for i in range(len(waveletExact)):
-    print(errQ2temp(waveletPredmu[i], waveletH[i]))
-
+### Error in the Wavelet space
+for i in range(wlevel):
+    print(i,np.max(np.abs(waveletExact[i]-waveletPredmu[i])))
 
 ## plot of the Q2
 plt.clf()
 plt.plot(t, errQ2temp(predWmean,Exact), label="wavelet")
 #plt.plot(t, errQ2temp(PredR.numpy(),Exact.numpy()), label="Mixed")
 plt.ylim( 0.60, 1.001)
-plt.legend()
+#plt.legend()
 #plt.savefig("Q2NH_7sinus.pdf")
 plt.show()
 #plt.savefig("WaveletQ2Kriging.pdf")
@@ -296,7 +352,7 @@ couleurs= ['b','r','y','g','purple','orange','navy','magenta','lime','aqua','bis
 for i in range(3):
     plt.plot( t, Exact[i,:], color=couleurs[i])
     plt.plot( t, predWmean[i,:],'--', color=couleurs[i])
-    plt.fill_between( t, predWmean[i,:] - 1.96*np.sqrt(waveletvar[i,:])/2, predWmean[i,:] + 1.96*np.sqrt(waveletvar[i,:])/2, alpha=0.5, color=couleurs[i])
+    #plt.fill_between( t, predWmean[i,:] - 1.96*np.sqrt(waveletvar[i,:])/2, predWmean[i,:] + 1.96*np.sqrt(waveletvar[i,:])/2, alpha=0.5, color=couleurs[i])
 
 #plt.savefig("examplesCurves")
 plt.show()
