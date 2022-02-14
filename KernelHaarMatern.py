@@ -25,12 +25,12 @@ class KernHaarMatern52(Kern):
         #inter = np.zeros((X1.shape[0], X2.shape[0]))
         #for i in range(X1.shape[0]):
         #    inter[i,:] = self.coeffInteger( X1[i,self.dim_start], X2[:,self.dim_start])/self.lengthscale**5 *self.integralFull( X1[i,self.dim_start+1], X2[:,self.dim_start+1], X1[i,self.dim_start], X2[:,self.dim_start])
-        inter = self.coeffInteger( X1[:,self.dim_start], X2[:,self.dim_start])*abs(self.lengthscale) *self.integralFull( X1[:,self.dim_start+1], X2[:,self.dim_start+1], X1[:,self.dim_start], X2[:,self.dim_start])
+        inter = self.coeffInteger( X1[:,self.dim_start], X2[:,self.dim_start])* self.lengthscale *self.integralFull( X1[:,self.dim_start+1], X2[:,self.dim_start+1], X1[:,self.dim_start], X2[:,self.dim_start])
         return(  inter)
 
     ### la méthode pour caculer la varianceX1[:,self.dim_start+1]
     def Kdiag( self, X):
-        return( self.coeffInteger( X[:,self.dim_start], X[:,self.dim_start])*abs(self.lengthscale) *self.integralFull( X[:,self.dim_start+1], X[:,self.dim_start+1], X[:,self.dim_start], X[:,self.dim_start]))
+        return( self.coeffInteger( X[:,self.dim_start], X[:,self.dim_start])* self.lengthscale *self.integralFull( X[:,self.dim_start+1], X[:,self.dim_start+1], X[:,self.dim_start], X[:,self.dim_start]))
 
 
     ### la méthode pour calculer le coefficient de normalisation de la covariance
