@@ -39,7 +39,7 @@ class KernHaarMatern52(Kern):
         ### Ici il y a un petit problème de taille avec s et sstar 
         si =s.reshape(s.shape[0],1)
         sistar =sstar.reshape(sstar.shape[0],1)
-        return( (400*np.sqrt(5))/(3*(np.sqrt(si*sistar.T))))
+        return( (400*np.sqrt(5))/(3*(np.sqrt(si*sistar.T))*2*np.pi))    ### Correction by the $2\pi$
 
     ### La méthode pour calculer la covariance totale
     def integralFull( self, u, ustar, s, sstar):
