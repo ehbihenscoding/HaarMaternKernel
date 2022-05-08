@@ -38,25 +38,47 @@ def fH(x,t):
 
 
 ## On génère un sinus avec 1 paramètre pour faire notre simulation de données
-dim = 1
-Nt = 2**8
-t = np.linspace(0, 1,Nt)
-NH = 2
-NL = 200
-xH = lhs( dim, samples = NH)
-yH = fH(xH,t)
-#yH = np.sin( 4*np.pi*xH*t+ xH/2)
-yH = np.sin( 4*np.pi*t )+ (xH/2 -1/4)
-xL = xH
-yL = yH
-Ndata = 10
+# dim = 1
+# Nt = 2**4
+# t = np.linspace(0, 1,Nt)
+# NL = 200
+# yH = np.sin( 4*np.pi*(xH/4+1)*t+ xH/10)
+# yH = np.sin( 4*np.pi*t )+ (xH/2 -1/4)
+# xL = xH
+# yL = yH
 
+dim = 1
+N = 10
+M = 7
+NH = 20
+Nt = 2**(N+M)
+xH = lhs( dim, samples = NH)
+tcontinu = np.linspace(0, 1,Nt)    # temps sur échantillonné
+t = np.linspace(0, 1, 2**M) # temps sous échantillonné
+yHcontinu =  np.sin( 4*np.pi*(xH/4+1)*tcontinu+ xH/10) # fH( xH, tcontinu) # version sur échantillonné de la fonction
+yHcontinu = fH( xH, tcontinu)
+
+### On sous échantillonne la fonction
+yH = np.zeros((NH,2**M))
+for k in range(2**M):
+    yH[:,k] = np.sum(yHcontinu[:,k*2**N:(k+1)*2**N],1)* 1/2**N
+
+# # ### Affichage:
+# # for k in range(20):
+# #     plt.plot(tcontinu, yHcontinu[k,:],'r')
+# #     plt.plot(t, yH[k,:],'b')
+
+# # plt.show()
 ### Comme c'est trop couteux pour le moment
-Ndata = 3   # 
+Ndata = 18   # 
 Xtest = np.random.uniform(0,1, Ndata).reshape(Ndata,dim)
-Exact = fH(Xtest,t)
-#Exact = np.sin( 4*np.pi*Xtest*t+ Xtest/2)
-Exact = np.sin( 4*np.pi*t)+ (Xtest/2 -1/4)
+Exactcontinu = np.sin( 4*np.pi*(Xtest/4+1)*tcontinu+ Xtest/10) # Exactcontinu = fH(Xtest,tcontinu)
+Exact = np.zeros((Ndata,2**M))
+for k in range(2**M):
+    Exact[:,k] = np.sum(Exactcontinu[:,k*2**N:(k+1)*2**N],1)* 1/2**N
+
+#Exact = np.sin( 4*np.pi*(Xtest/4+1)*t+ Xtest/10)
+#Exact = np.sin( 4*np.pi*t)+ (Xtest/2 -1/4)
 detat = int(t[-1]-t[0])
 
 #Ndata = NH
@@ -64,6 +86,7 @@ detat = int(t[-1]-t[0])
 #Exact = yH
 ### Décompositon en ondelette
 ### On ch
+
 
 ### Décompositon en ondelette
 ### On choisi toujours Haar car c'est celui qui fonctionne pour nos calcules
@@ -73,7 +96,7 @@ wlevel = pywt.dwt_max_level(len(t), db1) # nombre de niveau d'ondelettes
 ## décomposition
 ### Wavelet transform of the data low and high fidelity
 waveletH = pywt.wavedec(yH, db1, mode='constant', level=wlevel)
-waveletL = pywt.wavedec(yL, db1, mode='constant', level=wlevel)
+#waveletL = pywt.wavedec(yL, db1, mode='constant', level=wlevel)
 
 ### On calcule les coefficients pour les ondelettes
 coeffOndeletteinter = pywt.wavedec(t, db1, mode='constant', level=wlevel)
@@ -91,25 +114,43 @@ for i in range(len(coeffOndeletteinter)):   # iteration sur les niveaux
 ### Mise en forme des données pour qu'elles correspondent à un Krigeage simple
 sizescalefunction = coeffOndeletteinter[0].shape[0]
 NbCO = len(coeffOndelette) - sizescalefunction
-sizeechel = len(coeffOndeletteinter[0])     # taille des coefficients d'echelle
 NY = NH*NbCO
+
 Ymatrix = np.zeros( ( NH, NbCO))   # initialisation sur les donnée
-X = np.zeros( ( NY, dim+2)) #initialisation des entrées
 j = 0   # ititialisation du dernier coefficient modifié
+for i in range(1,wlevel+1):  # on fait l'intération sur les niveaux
+    tailleData =  waveletH1[i].shape[0]  # On calcule le nombre de données disponibles
+    Ymatrix[:,j:(j+tailleData)] = waveletH[i]/np.sqrt(2)  # les coefficents de Haar sont ordonnées dans une matrix
+    j = j+tailleData    # le dernier coefficient changé change
+
+Y = Ymatrix.T.reshape(( NY,1))
+
+############### Calculer X
+#### Definition des entrées dans notre cas 
+X = np.zeros( ( NY, dim+2))
+
 jX = 0
 for i in range(1,wlevel+1):  # on fait l'intération sur les niveaux
     tailleData =  waveletH[i].shape[1]  # On calcule le nombre de données disponibles
-    Ymatrix[:,j:(j+tailleData)] = waveletH[i]   # les coefficents de Haar sont ordonnées dans une matrix
     X[jX:(jX+NH*tailleData),:dim] = np.repeat(xH, tailleData,axis=1).T.reshape(NH*tailleData,1) # on place les paramètres d'entrée du système
-    X[jX:(jX+NH*tailleData),dim] = 2**(i-1) # on positionnne les s
+    X[jX:(jX+NH*tailleData),dim] = 2**(wlevel-i)#2**(i-1) # on positionnne les s
     for k in range( tailleData): # on positionne l'ensemble des u
-        X[(jX+k*NH):((jX+(k+1)*NH)),dim+1] = coeffOndelette[j+sizescalefunction+k]
-    j = j+tailleData    # le dernier coefficient changé change
-    jX = jX+tailleData * NH   # le dernier coefficient changé change
+        #X[(jX+k):((jX+(k+1))),2] =  coeffOndelette[j+sizescalefunction+k]*2**(wlevel-i)
+        X[(jX+k*NH):((jX+(k+1)*NH)),dim+1] =  k #coeffOndelette[j+sizescalefunction+k]/2**(wlevel-i)#*2**(i-wlevel)
+    #j = j+tailleData
+    jX = jX+tailleData * NH
 
-#X[:,2] = X[:,1]*X[:,2]-1/2 # pour le cas où les indices sont des entier
-#### Pour avoir les sorties sous forme de vecteurs
-Y = Ymatrix.T.reshape(( NY,1))
+# X = np.zeros( ( NY, dim+2)) #initialisation des entrées
+# jX = 0
+# for i in range(1,wlevel+1):  # on fait l'intération sur les niveaux
+#     tailleData =  waveletH[i].shape[1]  # On calcule le nombre de données disponibles
+#     Ymatrix[:,j:(j+tailleData)] = waveletH[i]   # les coefficents de Haar sont ordonnées dans une matrix
+#     X[jX:(jX+NH*tailleData),:dim] = np.repeat(xH, tailleData,axis=1).T.reshape(NH*tailleData,1) # on place les paramètres d'entrée du système
+#     X[jX:(jX+NH*tailleData),dim] = 2**(i-1) # on positionnne les s
+#     for k in range( tailleData): # on positionne l'ensemble des u
+#         X[(jX+k*NH):((jX+(k+1)*NH)),dim+1] = coeffOndelette[j+sizescalefunction+k]*2**(wlevel-i)
+#     j = j+tailleData    # le dernier coefficient changé change
+#     jX = jX+tailleData * NH   # le dernier coefficient changé change
 
 ###########################################################
 ### Pour i = 0 on passe par la fonction d'echelle donc par un krigeage indépendant
@@ -141,15 +182,15 @@ mu1ech, v1ech = mech.predict(Xtest)
 #### Definition des entrées dans notre cas 
 Xdata = np.zeros( ( Ndata*NbCO, dim+2))
 
-j = 0   # ititialisation du dernier coefficient modifié
+#j = 0   # ititialisation du dernier coefficient modifié
 jX = 0
 for i in range(1,wlevel+1):  # on fait l'intération sur les niveaux
     tailleData =  coeffOndeletteinter[i].shape[0]  # On calcule le nombre de données disponibles
     Xdata[jX:(jX+Ndata*tailleData),:dim] = np.repeat(Xtest[:Ndata,:], tailleData,axis=1).T.reshape(Ndata*tailleData,1) # on place les paramètres d'entrée du système
-    Xdata[jX:(jX+Ndata*tailleData),dim] = 2**(i-1) # on positionnne les s
+    Xdata[jX:(jX+Ndata*tailleData),dim] = 2**(wlevel-i) # on positionnne les s
     for k in range( tailleData): # on positionne l'ensemble des u
-        Xdata[(jX+k*Ndata):((jX+(k+1)*Ndata)),dim+1] = coeffOndelette[j+sizescalefunction+k]
-    j = j+tailleData
+        Xdata[(jX+k*Ndata):((jX+(k+1)*Ndata)),dim+1] =  k
+    #j = j+tailleData
     jX = jX+tailleData * Ndata
 
 ######################################################
@@ -246,10 +287,12 @@ def explainVariance( wlevel, covMat, Ndata, Nt):
 
 
 ##### Adaptative way
-nbElements = 300    # the number of elements in the learning set
-kernelHaar = KernHaarMatern52(2+dim,dim, 1)*GPy.kern.Matern52(dim,1,1) # Definition of the kernel
-covVector = np.diag(kernelHaar.K(X)*1/np.sqrt(X[:,1]))
-optimalset = np.argsort(covVector, kind = 'mergesort')[-nbElements:]
+nbElements = 300   # the number of elements in the learning set
+kernelHaar = KernHaarMatern52(2+dim,dim, 2**wlevel)*GPy.kern.Matern52(dim,1,1) # Definition of the kernel
+variancediag = np.array([kernelHaar.Kdiag(X[i,:].reshape((1,3))) for i in range(X.shape[0])]).reshape(X.shape[0]) # = np.diag(kernelHaar.K(X))
+ratioVector = (1/variancediag * np.abs(Y.reshape(Y.shape[0])))
+ratioVector = variancediag* np.abs(Y.reshape(Y.shape[0]))
+optimalset = np.argsort(ratioVector, kind = 'mergesort')[-nbElements:]
 
 # for repetition in tqdm(range(10)):   # optimisation loop: we repeat the optimisation in order to improve the learning set
 #     corMatrix = kernelHaar.K(X) # definition of the covariance
@@ -269,9 +312,33 @@ optimalset = np.argsort(covVector, kind = 'mergesort')[-nbElements:]
 Xreduce = X[optimalset,:]
 Yreduce = Y[optimalset,:]
 
+### On retransforme les donnés pour pouvoir les exploiter dans l'espace considéré.
+mu1 = np.zeros(Y.shape)
+mu1[optimalset,:] = Yreduce
+ydimreduce = [Yechell* np.sqrt(Nt)] ## mean with normalisation of the coefficients
+sumsetsize = 0
+for i in range(1,wlevel+1):
+    setsize = coeffOndeletteinter[i].shape[0]
+    inter = np.zeros( ( NH, setsize))
+    for j in range(setsize):
+        inter[:,j] = mu1[sumsetsize:(sumsetsize+NH)].T
+        sumsetsize = sumsetsize + NH
+    ydimreduce.append(inter)
+
+yreconstruct =  pywt.waverec(ydimreduce, db1)
+
+couleurs= ['b','r','y','g','purple','orange','navy','magenta','lime','aqua','bisque','royalblue','gray','gold','tan']
+for i in range(3):
+    plt.plot( t, yH[i,:], color=couleurs[i])
+    plt.plot( t, yreconstruct[i,:],'--', color=couleurs[i])
+    #plt.fill_between( t, predWmean[i,:] - 1.96*np.sqrt(waveletvar[i,:])/2, predWmean[i,:] + 1.96*np.sqrt(waveletvar[i,:])/2, alpha=0.5, color=couleurs[i])
+
+#plt.savefig("examplesCurves")
+plt.show()
+
 ### Plot of the chosen elements
-plt.plot(covVector)#*1/np.sqrt(X[:,1]))
-plt.plot(optimalset, covVector[optimalset],'o')
+plt.plot(ratioVector)
+plt.plot(optimalset, ratioVector[optimalset],'o')
 plt.show()
 
 ######################################################
@@ -280,10 +347,10 @@ plt.show()
 
 active_dimensions = np.arange(0,dim)
 
-kernelHaar = KernHaarMatern52(2+dim,dim, 15)*GPy.kern.Matern52(dim)
+kernelHaar = KernHaarMatern52(2+dim,dim, Nt)*GPy.kern.Matern52(dim)
 m = GPy.models.GPRegression(X=Xreduce, Y=Yreduce, kernel=kernelHaar)
 
-m[".*Gaussian_noise"] = m.Yreduce.var()*0.0
+#m[".*Gaussian_noise"] = m.Yreduce.var()*0.0
 m[".*Gaussian_noise"].fix()
 
 m.optimize(max_iters = 2000, messages=True, optimizer = "bfgs")  # optimisation des hyperpamètres
@@ -294,7 +361,7 @@ m[".*variance"].constrain_positive()
 m[".*lengthscale"].constrain_positive()
 
 #
-m.optimize_restarts(20, optimizer = "bfgs",  max_iters = 2000, messages=True) #,verbose=False)
+m.optimize_restarts(20, optimizer = "bfgs",  max_iters = 200, messages=True) #,verbose=False)
 
 mu1, v1 = m.predict(Xdata)
 
@@ -305,7 +372,7 @@ for i in range(1,wlevel+1):
     setsize = coeffOndeletteinter[i].shape[0]
     inter = np.zeros( ( Ndata, setsize))
     for j in range(setsize):
-        inter[:,j] = mu1[sumsetsize:(sumsetsize+Ndata)].T
+        inter[:,j] = mu1[sumsetsize:(sumsetsize+Ndata)].T*np.sqrt(2)    # normalisation
         sumsetsize = sumsetsize + Ndata
     waveletPredmu.append(inter)
 
@@ -331,16 +398,34 @@ waveletvar = abs(variancetot) ### pour que ça soit bien positif
 predWmean = pywt.waverec(waveletPredmu, db1)
 #### The exact values
 waveletExact = pywt.wavedec(Exact, db1, mode='constant', level=wlevel)
+### compareason with the prediction in the wavelet space
+matrixExact = np.zeros(mu1.shape)
+sumsetsize = 0
+for i in range(wlevel):
+    setsize = coeffOndeletteinter[i].shape[0]
+    matrixExact[sumsetsize:(sumsetsize+Ndata*setsize)] = waveletExact[i].reshape(Ndata*setsize,1)
+    sumsetsize = sumsetsize + Ndata*setsize
+# plt.plot(mu1-matrixExact)
+# plt.plot(matrixExact)
+# #plt.plot(Y)
+# #plt.plot(mu1)
+# plt.show()
 
 ### Error in the Wavelet space
 for i in range(wlevel):
     print(i,np.max(np.abs(waveletExact[i]-waveletPredmu[i])))
 
+for i in range(10):
+    plt.plot( t, predWmean[i,:],'--',color=couleurs[i])
+    plt.plot( tcontinu, Exactcontinu[i,:],color=couleurs[i])
+    plt.plot( t, Exact[i,:], '*', color=couleurs[i])
+
+plt.show()
 ## plot of the Q2
 plt.clf()
 plt.plot(t, errQ2temp(predWmean,Exact), label="wavelet")
 #plt.plot(t, errQ2temp(PredR.numpy(),Exact.numpy()), label="Mixed")
-plt.ylim( 0.60, 1.001)
+plt.ylim( 0.70, 1.001)
 #plt.legend()
 #plt.savefig("Q2NH_7sinus.pdf")
 plt.show()
@@ -356,19 +441,29 @@ for i in range(3):
 
 #plt.savefig("examplesCurves")
 plt.show()
-
 ### Affichage de la covariance
-plt.imshow(kernelHaar.K(X))
+plt.imshow(kernelHaar.K(Xdata))
 plt.xlabel('X')
 plt.ylabel('X')
 #plt.savefig("CovarianceMatrix.pdf")
 plt.show()
 
-#### Save model from 
+Xsimple = X[:,1:]
+toto =KernHaarMatern52(2+1,1, 15).K(X)
+plt.imshow(toto)
+plt.show()
+
+# #### Save model 
+# # save model data
+np.save('data_save.npy',xH)
+# # save model parameters
 np.save('model_save.npy',m.param_array)
-# loading the model
-m = GPy.models.GPRegression(X=X, Y=Y, initialize=False, kernel=kernelHaar)
-m.update_model(False)
-m.initialize_parameter()
-m[:] = np.load('model_save.npy')
-m.update_model(True)
+# # loading the model
+# m2 = GPy.models.GPRegression(X=X, Y=Y, initialize=False, kernel=kernelHaar)
+# m2.update_model(False)
+# m2.initialize_parameter()
+xH2 = np.load('data_save.npy')
+tcontinu = np.linspace(0, 1,Nt)    # temps sur échantillonné
+t = np.linspace(0, 1, 2**M) # temps sous échantillonné
+# m2[:] = np.load('model_save.npy')
+# m2.update_model(True)

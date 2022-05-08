@@ -78,7 +78,7 @@ class KernHaarMatern52(Kern):
         ### defintion de la différence des gamma
         gamma = np.array([ np.kron(s, sstar.T*0+1)*0/2+np.kron(s*0+1, sstar.T)*0/2, np.kron(s, sstar.T*0+1)/2+np.kron(s*0+1, sstar.T)/2*0, -np.kron(s, sstar.T*0+1)/2+np.kron(s*0+1, sstar.T)/2*0, np.kron(s, sstar.T*0+1)*0/2-np.kron(s*0+1, sstar.T)/2,  np.kron(s, sstar.T*0+1)*0/2+np.kron(s*0+1, sstar.T)/2,  np.kron(s, sstar.T*0+1)/2-np.kron(s*0+1, sstar.T)/2, -np.kron(s, sstar.T*0+1)/2+np.kron(s*0+1, sstar.T)/2, np.kron(s, sstar.T*0+1)/2+np.kron(s*0+1, sstar.T)/2, -np.kron(s, sstar.T*0+1)/2-np.kron(s*0+1, sstar.T)/2])
         ### on ajoute le terme constant dans le gamma
-        gamma = gamma + np.repeat((np.kron(s*u, sstar.T*0+1)-np.kron(s*0+1, sstar.T*ustar.T))[np.newaxis,:,:],9,axis=0)
+        gamma = gamma + np.repeat((np.kron(s*(u+1/2), sstar.T*0+1)-np.kron(s*0+1, sstar.T*(ustar.T+1/2)))[ np.newaxis,:,:],9,axis=0)
         ### On calcule le premier terme de la somme de fraction
         termSum1 = ( 3* self.lengthscale/(100*np.sqrt(5)) + 7* np.abs(gamma)/1000)
         ### On calcule le deuxième terme de la somme de fraction
